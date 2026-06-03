@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.API_URL || 'https://captain.sapimu.au/dramabox/api/v1';
+const API_URL = process.env.API_URL || 'https://captain.sapimu.au/dramaboxv4';
 const TOKEN = process.env.AUTH_TOKEN;
 
 const ALLOWED_PATHS = ['/foryou/', '/new/', '/rank/', '/search/', '/suggest/', '/classify', '/chapters/', '/watch/'];
