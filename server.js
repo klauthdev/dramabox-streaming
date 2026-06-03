@@ -6,47 +6,88 @@ config()
 
 const app = express()
 
-const API_URL = process.env.API_URL || 'https://captain.sapimu.au/dramabox/api/v1'
+app.use(express.json())
+
+const API_URL = process.env.API_URL || 'https://captain.sapimu.au/dramaboxv4'
 const TOKEN = process.env.AUTH_TOKEN
 
-const ALLOWED_PATHS = ['/foryou/', '/new/', '/rank/', '/search/', '/suggest/', '/classify', '/chapters/', '/watch/']
+const ALLOWED_PATHS = [
+  '/languages',
+  '/home',
+  '/rank',
+  '/recommend/book',
+  '/theater',
+  '/search',
+  '/drama/',
+  '/play',
+  '/proxy-sub'
+]
 
-app.use('/api', async (req, res) => {
+app.use('/api', async (req, res, next) => {
   const path = req.path
-  
-  if (!ALLOWED_PATHS.some(p => path.startsWith(p))) {
-    return res.status(403).json({ error: 'Forbidden' })
+
+  const isAllowed = ALLOWED_PATHS.some(p => {
+    if (p.endsWith('/')) {
+      return path.startsWith(p)
+    }
+
+    return path === p || path.startsWith(p + '/')
+  })
+
+  if (!isAllowed) {
+    return res.status(403).json({
+      error: 'Forbidden',
+      path
+    })
+  }
+
+  if (!TOKEN) {
+    return res.status(500).json({
+      error: 'AUTH_TOKEN not configured'
+    })
   }
 
   try {
-    const response = await axios.get(`${API_URL}${path}`, {
+    const url = `${API_URL}${path}`
+
+    const config = {
       params: req.query,
-      headers: { Authorization: `Bearer ${TOKEN}` }
-    })
-    
-    // Protect watch endpoint for episodes >= 30
-    if (path.startsWith('/watch/')) {
-      const pathParts = path.split('/')
-      const episode = parseInt(pathParts[3])
-      
-      if (episode >= 30) {
-        return res.status(403).json({ 
-          success: false, 
-          error: 'Episode locked',
-          message: 'For full API access, check Telegram @sapitokenbot'
-        })
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        'User-Agent': 'DramaBox-Proxy/1.0',
+        'Content-Type': 'application/json'
       }
     }
-    
-    res.json(response.data)
+
+    let response
+
+    if (req.method === 'GET') {
+      response = await axios.get(url, config)
+    } else if (req.method === 'POST') {
+      response = await axios.post(url, req.body, config)
+    } else {
+      return res.status(405).json({
+        error: 'Method not allowed'
+      })
+    }
+
+    return res.json(response.data)
   } catch (err) {
-    res.status(err.response?.status || 500).json({ 
-      error: 'For full API access, check Telegram @sapitokenbot' 
+    return res.status(err.response?.status || 500).json({
+      error: 'API request failed',
+      status: err.response?.status,
+      apiResponse: err.response?.data,
+      message: err.message
     })
   }
 })
 
 app.use(express.static('dist'))
-app.get('/{*path}', (req, res) => res.sendFile('index.html', { root: 'dist' }))
 
-app.listen(3000, () => console.log('Server running on port 3000'))
+app.get('*', (req, res) => {
+  res.sendFile('index.html', { root: 'dist' })
+})
+
+app.listen(3000, () => {
+  console.log('Server running on port 3000')
+})
